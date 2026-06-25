@@ -3,6 +3,16 @@
 > 한 사람이 어렵게 배운 교훈을 캡처해, **모두의 AI 에이전트에 자동으로 강제**하는 Codex 플러그인.
 > 무신사가 기술블로그에 공개한 엔지니어링 교훈을 기본 규칙(seed)으로 탑재하고, 팀이 `/remember`로 규칙을 계속 키워 `/review`로 PR을 검수·채점한다.
 
+## 설치 (Codex)
+
+```bash
+codex plugin marketplace add KimDaeHyun00/musinsa-rulebook
+# Codex 안에서:
+/plugins                 # → "musinsa-rulebook" 설치 → 활성화
+pip install pyyaml       # 룰북 스캐너(check.py) 의존성
+```
+사용: `@remember "<규칙>"` 으로 규칙 추가, `@review` 로 변경분 채점. (자연어로도 트리거)
+
 ---
 
 ## 1. 무엇을, 누가, 어떤 상황에서 쓰나
