@@ -30,42 +30,36 @@ Merge into one effective ruleset: a rule `id` present in a later layer replaces 
 
 ## 3. Deterministic pass first (hybrid — do NOT skip)
 
-Run the bundled scanner over the changed files:
+Run the bundled scanner in **report mode** over the changed files. Pass the seed rules first, then the repo rulebook if present (later layers override same-id rules):
 
 ```
-python3 "${CODEX_PLUGIN_ROOT}/scripts/check.py" --rules <merged-rules-path-or-seed> --files <changed files...>
+python3 "${CODEX_PLUGIN_ROOT}/scripts/check.py" --report \
+  --rules "${CODEX_PLUGIN_ROOT}/rules/seed.yaml" [--rules .musinsa/rules.yaml] \
+  --files <changed files...>
 ```
 
-It returns JSON hits `{rule_id, file, line, snippet}` for every rule whose `detect.patterns` match. These are high-confidence, reproducible findings — the score must not drift between runs for the same diff because of them.
+This prints the full, reproducible findings block: the score, the gate, and for each pattern-matched violation the `[dimension]`, `file:line`, points, rule title, **근거 (with the original Musinsa metrics), 👉 fix, and 🔗 source URL**. Capture this block exactly — it is the deterministic, auditable core. The score must not drift between runs for the same diff.
 
-If the scanner cannot run (missing dep), say so explicitly in the report and fall back to manual pattern matching — never silently skip.
+If the scanner cannot run (missing dep), say so explicitly and fall back to manual matching — never silently skip.
 
 ## 4. Judgment pass (for `detect.llm_hint`)
 
-For rules whose findings depend on design judgment (e.g. `golden-master-before-refactor`, `type-branch-to-strategy`), read the actual diff and decide using the rule's `llm_hint`. Only flag when you are confident and can point to a specific file:line. When unsure, mark `info`, not `block`.
+Some rules can't be caught by regex (e.g. `golden-master-before-refactor`, deeper coupling smells). Read the diff and judge using each rule's `llm_hint`. When you flag one, format it **identically** to a scanner finding (severity, `[dimension]`, `file:line`, 규칙 / 근거 / 👉 / 🔗 using that rule's own rationale/fix/source verbatim) and recompute the score with the same weights below. Only flag when confident with a concrete `file:line`; when unsure use `info`.
 
-## 5. Score
+Score: start 100; `block` −15, `warn` −8, `info` −2 (cap 100); any `block` ⇒ Gate **BLOCKED**; one finding per (rule_id, file, line).
 
-- Start at 100.
-- Each finding subtracts by severity: `block` −15, `warn` −8, `info` −2 (cap total deductions at 100).
-- Any `block` finding sets the gate to **BLOCKED** regardless of score.
-- Deduplicate: one finding per (rule_id, file, line).
+## 5. Output — 3 parts, in this exact order
 
-## 6. Output (exactly this shape)
+A busy engineer must grasp and act on this in seconds. Output:
 
-```
-🏷️  Musinsa Readiness Score: <N>/100   ·   Gate: <PASS | BLOCKED>
-     rulebook: seed(<n>) + repo(<n>)  ·  changed files: <n>
+**(1) 한 줄 판정 요약** — your own words, ≤2 lines. **Lead with the score and gate**, then the count by severity and the single most important thing to fix. Example:
+> 🔴 **53/100 · BLOCKED** — 위반 5건(치명적 1: 인덱스 무력화). 상품상세 쿠폰 쿼리가 풀스캔이라 배포 전 필수 수정.
 
-<for each finding, worst severity first>
-<❌ block | ⚠️ warn | ℹ️ info>  [<dimension>]  <file>:<line>   (<-points>)
-   규칙: <title>   (<added_by>)
-   근거: <rationale>
-   👉  <fix>
-   🔗  <source>
+**(2) 검증 결과 (VERBATIM)** — reproduce the `check.py --report` block (plus any judgment-pass findings in the same format), **worst severity first**. Do **NOT** paraphrase, shorten, or drop the 근거 수치 / 🔗 출처 — those are the auditable evidence and the whole point. Reproduce them exactly as the scanner emits.
 
-<if none>
-✅ 룰북 위반 없음 — 모든 규칙 통과.
-```
+**(3) 우선순위 수정 플랜** — a short numbered list, blockers first, one line each: `file:line` + the concrete fix. Close with: the Gate opens once every `block` item is resolved. If you spot a recurring issue not yet in the rulebook, suggest capturing it with `/remember`.
 
-End with one line on what to do next (fix the blockers, or "/remember" a new rule if you spotted a recurring issue not yet in the rulebook). Be precise and terse; never invent a violation to pad the report.
+If there are zero findings, output only:
+> ✅ **Musinsa Readiness 100/100 · PASS** — 룰북 위반 없음.
+
+Never invent a violation to pad the report. Terse, scannable, action-first.
