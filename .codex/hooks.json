@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 tools/save_log.py --tool codex"
+          }
+        ]
+      }
+    ]
+  }
+}

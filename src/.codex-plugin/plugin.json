@@ -1,0 +1,26 @@
+{
+  "name": "musinsa-rulebook",
+  "version": "0.1.0",
+  "description": "A self-growing team rulebook for Codex. Captures one engineer's hard-won lesson and enforces it on everyone's agent, scoring each change against the team's accumulated rules. Seeded with Musinsa's public engineering lessons.",
+  "author": {
+    "name": "iotplusdev",
+    "url": "https://github.com/"
+  },
+  "license": "MIT",
+  "keywords": [
+    "code-review",
+    "rulebook",
+    "team-knowledge",
+    "guardrail",
+    "ai-native",
+    "musinsa",
+    "pr-review",
+    "conventions"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Musinsa Rulebook",
+    "shortDescription": "팀이 함께 키우는 Codex 코딩 룰북 — 한 사람의 교훈을 모두의 에이전트에 강제",
+    "category": "code-quality"
+  }
+}

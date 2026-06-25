@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 데모용 안티패턴: 상품 상세 페이지의 "최대 혜택가" 쿠폰 조회 (핫패스) -->
+<mapper namespace="com.musinsa.demo.coupon.CouponMapper">
+
+  <select id="findBestCoupons" resultType="CouponView">
+    SELECT *
+      FROM coupon c
+      JOIN coupon_brand cb  ON cb.coupon_id = c.id
+      JOIN coupon_category cc ON cc.coupon_id = c.id
+      JOIN brand b          ON b.id = cb.brand_id
+      JOIN product p        ON p.brand_id = b.id
+     WHERE c.status = 'ACTIVE'
+       AND p.id = #{productId}
+     ORDER BY DATE_FORMAT(c.created_at, '%Y%m%d') DESC
+  </select>
+
+</mapper>

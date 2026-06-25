@@ -1,0 +1,20 @@
+# Musinsa Rulebook — REPO layer (team-owned, grown via the `remember` skill)
+# Overrides same-id rules from the seed layer. Share by committing through a PR.
+version: 1
+layer: repo
+rules:
+  # 개발자 'donghyun'이 환불 금액 오차 인시던트 후 /remember 로 추가한 팀 규칙
+  - id: money-bigdecimal-not-double
+    dimension: convention
+    severity: block
+    title: "금액/가격은 double·float 금지 — BigDecimal 사용"
+    applies_to: ["**/payment/**", "**/*Amount*.java", "**/*Price*.java"]
+    detect:
+      patterns:
+        - "(?i)\\b(double|float)\\s+[A-Za-z_]*(amount|price|pay|money|cost|fee)"
+      llm_hint: "결제·정산 금액을 부동소수점(double/float)으로 다뤄 반올림 오차가 생길 수 있는가?"
+    rationale: "결제 금액을 double로 다루면 부동소수점 오차로 1원 단위 정산 불일치. (등록 계기: 환불 금액 오차 인시던트 2026-06-20)"
+    fix: "java.math.BigDecimal 사용, 비교는 compareTo(), setScale로 스케일 고정."
+    source: "on-call 2026-06-20 / PR #412"
+    added_by: "donghyun"
+    added_at: "2026-06-20"

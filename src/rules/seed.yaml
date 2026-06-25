@@ -1,0 +1,98 @@
+# Musinsa Rulebook — SEED layer
+# 무신사가 기술블로그에 공개한 엔지니어링 교훈을, 에이전트가 강제할 수 있는 규칙으로 코드화한 것.
+# 모든 규칙은 공개·검증 가능한 출처(source)를 가진다. (해커톤 ① 요건)
+#
+# 계층(cascading): seed(이 파일) < org(선택) < repo(.musinsa/rules.yaml)
+#   - 같은 id가 아래 계층에 있으면 아래가 위를 덮어쓴다.
+#   - repo 계층은 팀이 /remember 로 증식시킨다 — 플러그인 재배포 불필요.
+#
+# severity: block(치명적, 게이트) | warn(감점) | info(참고)
+# detect.patterns: 결정론적 1차 탐지(정규식). detect.llm_hint: 애매한 설계 판단은 에이전트가.
+
+version: 1
+layer: seed
+rules:
+  - id: query-func-in-orderby
+    dimension: query-index
+    severity: block
+    title: "ORDER BY/WHERE 정렬·필터 컬럼에 함수 적용 금지 (인덱스 무력화)"
+    applies_to: ["**/*.java", "**/*.kt", "**/*.sql", "**/*.xml"]
+    detect:
+      patterns:
+        - "(?is)ORDER\\s+BY[^;)]*\\b(DATE_FORMAT|DATE|CONVERT|CAST|SUBSTR|LOWER|UPPER|IFNULL)\\s*\\("
+        - "(?is)WHERE[^;)]*\\b(DATE_FORMAT|CONVERT|CAST)\\s*\\([a-z_\\.]+\\)\\s*(=|>|<)"
+      llm_hint: "정렬/필터 키를 함수로 감싸 sargability(인덱스 사용)를 깨뜨리는가?"
+    rationale: "함수로 감싼 컬럼은 인덱스를 못 타 풀스캔이 된다. 무신사 '10초 타임아웃' 사례: 1억 건 테이블에서 p99 350ms→20ms(17배), 평균 100ms→10ms."
+    fix: "정렬 키를 별도 컬럼(예: 신청일자 VARCHAR(8))으로 분리 → covering index 구성 → ID만 먼저 조회 후 본문 hydrate(ID-then-hydrate, 지연 조인)."
+    source: "https://techblog.musinsa.com/10초-타임아웃에서-벗어나기까지의-여정-a58eb8faca36"
+    added_by: seed
+
+  - id: select-star-breaks-covering
+    dimension: query-index
+    severity: warn
+    title: "핫패스 목록 쿼리에서 SELECT * / 비인덱스 컬럼 과다 조회 (covering index 무효화)"
+    applies_to: ["**/*.java", "**/*.kt", "**/*.sql", "**/*.xml"]
+    detect:
+      patterns:
+        - "(?is)SELECT\\s+\\*\\s+FROM"
+      llm_hint: "목록/페이징 쿼리가 인덱스에 없는 컬럼까지 끌어와 index-only scan을 깨고 테이블 액세스를 유발하는가?"
+    rationale: "SELECT가 인덱스 밖 컬럼을 포함하면 FORCE INDEX로도 테이블 접근이 발생. 무신사 사례: ID만 조회로 전환해 전송량 50KB→400B(99%↓)."
+    fix: "1차 쿼리는 covering index로 ID(PK)만 조회(LIMIT) → 2차로 IN(ids) 본문 조회 → 애플리케이션 메모리에서 조합."
+    source: "https://techblog.musinsa.com/10초-타임아웃에서-벗어나기까지의-여정-a58eb8faca36"
+    added_by: seed
+
+  - id: god-query-decompose
+    dimension: query-index
+    severity: warn
+    title: "거대 단일 쿼리(god-query) 금지 — 단일 책임 쿼리로 분해"
+    applies_to: ["**/*.sql", "**/*.xml", "**/*.kt", "**/*.java"]
+    detect:
+      patterns:
+        - "(?is)(JOIN[\\s\\S]{0,4000}?){4,}"
+      llm_hint: "하나의 쿼리가 JOIN/SUBQUERY/UNION/GROUP BY/CASE를 과도하게 묶어 수백 줄에 달하는가? (대략 150줄/4+ JOIN 초과)"
+    rationale: "무신사 상품상세 쿠폰 쿼리가 600줄로 비대해져 트래픽·인프라 비용 폭증. 분해 후 110→83ms, DB 사용률 72.5%→13.6%(캐시)."
+    fix: "단일 책임 원칙으로 짧은 쿼리 여러 개로 분리 + 저빈도/고변경 데이터 캐싱 + 계산은 애플리케이션 계층으로 이동."
+    source: "https://medium.com/musinsa-tech/무신사-성장과-함께-거대해져온-600줄짜리-쿠폰-쿼리와의-아름다운-이별-e689d7d932b5"
+    added_by: seed
+
+  - id: type-branch-to-strategy
+    dimension: design-coupling
+    severity: warn
+    title: "타입별 if/else·switch 분기 비즈니스 로직 금지 (OCP 위반) — 전략/팩토리로"
+    applies_to: ["**/*.java", "**/*.kt"]
+    detect:
+      patterns:
+        - "(?is)if\\s*\\([^{}]{0,200}Type[^{}]{0,200}\\)\\s*\\{[^{}]*\\}\\s*else\\s+if\\s*\\([^{}]{0,200}Type"
+        - "(?is)switch\\s*\\([^{}]*\\b[A-Za-z]+Type\\b[^{}]*\\)"
+      llm_hint: "캐리어/결제수단/채널 등 '타입'에 따라 if-else가 여러 메서드에 흩어져, 새 타입 추가 시 기존 코드를 수정해야 하는가?"
+    rationale: "무신사 배송사 연동이 타입 분기로 결합돼 새 배송사마다 기존 코드 수정·전체 재테스트 필요. 추상화(인터페이스+팩토리) 후 신규 연동 1달→1주(1/4)."
+    fix: "공통 인터페이스 + enum→구현 매핑 팩토리(Spring `Set`/`Map` 주입) + 공통 전후 로직은 상속 대신 합성(composition)."
+    source: "https://medium.com/musinsa-tech/추상화-리팩토링을-통한-해외-물류사-개발-비용-절감-c2bcc8d9624d"
+    added_by: seed
+
+  - id: golden-master-before-refactor
+    dimension: refactor-safety
+    severity: block
+    title: "리팩토링 PR에 특성화(Golden Master) 테스트 없음"
+    applies_to: ["**/*.java", "**/*.kt"]
+    detect:
+      patterns: []
+      llm_hint: "변경이 동작 보존형 리팩토링(구조 변경, 기능 동일)인데 행동을 고정하는 통합/특성화 테스트(@ExpectedDataSet 등)가 함께 추가/존재하지 않는가?"
+    rationale: "무신사 WMS god-class 리팩토링 시 유닛테스트는 설계 변경에 쉽게 깨져, 리팩토링 전 동작을 박제하는 Golden Master(통합) 테스트를 도입."
+    fix: "리팩토링 전 현재 동작을 Testcontainers+Database Rider로 캡처(@ExportDataSet→@ExpectedDataSet), 단계마다 회귀 검증."
+    source: "https://medium.com/musinsa-tech/리팩토링을-위한-통합-테스트-cd23498918a7"
+    added_by: seed
+
+  - id: single-tier-redis-hotpath
+    dimension: cache-reliability
+    severity: warn
+    title: "핫패스에서 단일 계층 원격 캐시(Redis)만 의존 / 거대 JSON 캐시값"
+    applies_to: ["**/*.java", "**/*.kt"]
+    detect:
+      patterns:
+        - "(?is)(RedisTemplate|redisTemplate|StringRedisTemplate|ReactiveRedisTemplate)"
+      llm_hint: "저변경·고빈도 데이터를 로컬 캐시(Caffeine) 없이 Redis만으로 핫패스에서 읽거나, 큰 JSON을 압축 없이 캐싱하는가?"
+    rationale: "29CM 이구위크 장애: ElastiCache 네트워크 대역폭 스로틀로 Redis 지연→파드 다운. 원인은 CPU/메모리가 아닌 대역폭."
+    fix: "Caffeine(로컬)→Redis(원격)→DB 캐시 계층화로 Redis 명령/전송 바이트 절감 + 큰 캐시값은 Snappy+protobuf 압축. ElastiCache 대역폭/burst-credit 모니터링."
+    source: "https://techblog.musinsa.com/이구위크-전시-장애-대응기-redis에는-무슨-일이-있었나-5599562d76b9"
+    added_by: seed

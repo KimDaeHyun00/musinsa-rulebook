@@ -1,0 +1,10 @@
+# 빌드 과정 AI 대화 로그 — 해커톤 submission.zip에만 포함, 공개 배포 레포엔 제외
+logs/
+
+# 개인 환경 설정(권한 allowlist 등)
+.claude/settings.local.json
+
+# noise
+__pycache__/
+*.pyc
+.DS_Store

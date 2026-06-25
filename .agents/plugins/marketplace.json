@@ -1,0 +1,19 @@
+{
+  "name": "musinsa-local",
+  "interface": {
+    "displayName": "Musinsa Rulebook (local)"
+  },
+  "plugins": [
+    {
+      "name": "musinsa-rulebook",
+      "source": {
+        "source": "local",
+        "path": "./src"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
