@@ -8,3 +8,6 @@ logs/
 __pycache__/
 *.pyc
 .DS_Store
+
+# 제출 아티팩트
+submission.zip
